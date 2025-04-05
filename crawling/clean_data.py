@@ -1,8 +1,6 @@
 import pandas as pd
 
 df1 = pd.read_csv("../combined_data.csv")
-df2 = pd.read_csv("../web_graph.csv")
-
 
 df1.columns = [
     'url', 
@@ -15,19 +13,20 @@ df1.columns = [
     'anchor_texts'
 ]
 
-df2.columns = [
-    'source', 
-    'destination', 
-    'anchor']
+# df2.columns = [
+#     'source', 
+#     'destination',
+#     'anchor']
+
+print(df1.shape)
+df1 = df1.sort_values("last_crawled").drop_duplicates(subset="url", keep="first")
+print(df1.shape)
 
 df1.dropna(subset=['url', 'body_text'], inplace=True)
 df1.to_csv("../combined_data.csv")
 
-df2.dropna(subset=['source'], inplace=True)
-df2.to_csv("../web_graph.csv")
 
 
-print(df1.loc[0])
-print(df2.loc[0])
+
 
 
