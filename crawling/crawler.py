@@ -18,15 +18,6 @@ SEED_TIMEOUT = 300  # Timeout for each seed (in seconds)
 
 combined_data = []  # List to store combined page data (content + metadata)
 
-# Load previously visited URLs (if running in batches)
-visited_file = 'visited_urls.csv'
-if os.path.exists(visited_file):
-    visited_df = pd.read_csv(visited_file)
-    visited_urls = set(visited_df['url'].tolist())
-    print(f"Loaded {len(visited_urls)} visited URLs from {visited_file}.")
-else:
-    visited_urls = set()
-
 # Step 4: Define Seed URLs (Expand for Diversity)
 seed_urls = [
     "https://saharareporters.com/news",
@@ -102,7 +93,7 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Crawling this seed took too long and was skipped.")
 
 # Step 8: Main Crawling Loop – Process Each Seed Website with Timeout Handling
-total_pages_crawled = len(visited_urls)
+total_pages_crawled = 0
 
 for site in seed_urls:
     if total_pages_crawled >= MAX_PAGES:
@@ -142,14 +133,11 @@ for site in seed_urls:
                 break
 
             this_url = row['url']
-            if this_url in visited_urls:
-                continue
 
             try:
                 page_data = process_page(row)
                 if page_data:
                     combined_data.append(page_data)
-                    visited_urls.add(this_url)
                     total_pages_crawled += 1
                     site_processed += 1
             except Exception as e:
@@ -175,7 +163,4 @@ if os.path.exists('combined_data.csv'):
 else:
     combined_df.to_csv('combined_data.csv', index=False, escapechar='\\')
 
-visited_df = pd.DataFrame({"url": list(visited_urls)})
-visited_df.to_csv(visited_file, index=False, escapechar='\\')
-
-print(f"Updated visited URLs saved to '{visited_file}' (total {len(visited_urls)} URLs).")
+print(f"✅ Combined data saved to 'combined_data.csv' with {len(combined_df)} new rows.")
