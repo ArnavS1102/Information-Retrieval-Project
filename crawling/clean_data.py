@@ -1,70 +1,47 @@
+import os
 import pandas as pd
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+from indexing.vector_model import VectorSpaceModel
 
-# === STEP 1: Load and clean initial combined_data.csv ===
-
-# Load CSV
-df = pd.read_csv("../combined_data.csv", escapechar='\\')
-
-# Ensure expected columns
-df.columns = [
-    'url', 
-    'title', 
-    'meta_description', 
-    'body_text', 
-    'depth', 
-    'last_crawled', 
-    'out_links', 
-    'anchor_texts'
-]
-
-print("Original shape:", df.shape)
-
-# Drop exact URL duplicates (keep earliest crawled version)
-df = df.sort_values("last_crawled").drop_duplicates(subset="url", keep="first")
-
-# Drop rows with missing critical content
-df.dropna(subset=['url', 'body_text'], inplace=True)
-
-
-print("After URL + content deduplication:", df.shape)
-
-# === STEP 2: Heuristic deduplication using (domain, directory, slug) key ===
+load_dotenv()
 
 def get_directory_and_slug(url):
-    parsed = urlparse(url)
-    path = parsed.path.rstrip('/')
+    path = urlparse(url).path.rstrip('/')
     if not path:
         return '', ''
     parts = path.split('/')
-    if len(parts) == 1:
-        return '', parts[0]
-    directory = '/'.join(parts[:-1])
-    slug = parts[-1]
-    return directory, slug
+    return ('/'.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', parts[0])
 
 def get_url_key(url):
     parsed = urlparse(url)
-    netloc = parsed.netloc.lower()
     directory, slug = get_directory_and_slug(url)
-    return (netloc, directory, slug)
+    return (parsed.netloc.lower(), directory, slug)
 
-# Generate deduplication key
-df['url_key'] = df['url'].apply(get_url_key)
+if __name__ == "__main__":
+    combined_data_path = os.path.join(os.getenv("COMBINED_DATA_PATH"))
+    cache_path = os.path.join(os.getenv("TF_IDF_PATH"))
 
-# Drop duplicates based on the custom URL key
-df = df.drop_duplicates(subset='url_key')
-df = df.drop(columns=['url_key'])
+    df = pd.read_csv(combined_data_path, escapechar='\\')
 
-print("After heuristic URL deduplication:", df.shape)
+    df.columns = [
+        'url', 
+        'title', 
+        'meta_description', 
+        'body_text', 
+        'depth', 
+        'last_crawled', 
+        'out_links', 
+        'anchor_texts'
+    ]
 
-# === STEP 3: Save final deduplicated output ===
-df.to_csv("../combined_data.csv", index=False, escapechar='\\')
+    df = df.sort_values("last_crawled").drop_duplicates(subset="url", keep="first")
+    df.dropna(subset=['url', 'body_text'], inplace=True)
 
-li= [i for i in df['url']]
+    df['url_key'] = df['url'].apply(get_url_key)
+    df = df.drop_duplicates(subset='url_key').drop(columns='url_key')
 
-url_df = pd.DataFrame(li, columns=['url'])
+    df.to_csv(combined_data_path, index=False, escapechar='\\')
 
-url_df.to_csv('../visited.csv', index=False)
-
-print(f"✅ Final deduplicated dataset saved with {len(df)} rows to 'combined_data_deduped.csv'.")
+    model = VectorSpaceModel(combined_data_path, cache_path)
+    model.preprocess_and_vectorize()
