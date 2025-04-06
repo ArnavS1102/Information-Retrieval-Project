@@ -60,4 +60,11 @@ print("After heuristic URL deduplication:", df.shape)
 
 # === STEP 3: Save final deduplicated output ===
 df.to_csv("../combined_data.csv", index=False, escapechar='\\')
+
+li= [i for i in df['url']]
+
+url_df = pd.DataFrame(li, columns=['url'])
+
+url_df.to_csv('../visited.csv', index=False)
+
 print(f"✅ Final deduplicated dataset saved with {len(df)} rows to 'combined_data_deduped.csv'.")
