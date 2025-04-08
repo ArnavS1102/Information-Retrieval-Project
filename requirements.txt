@@ -1,0 +1,9 @@
+requests
+advertools
+bs4
+networkx
+scikit-learn
+python-dotenv
+numpy<2
+transformers==4.38.2
+sentence-transformers==2.3.1

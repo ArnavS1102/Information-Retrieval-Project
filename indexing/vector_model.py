@@ -1,25 +1,21 @@
 import os
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import hashlib
 import pickle
-import sys
+import faiss
+from sentence_transformers import SentenceTransformer
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-class VectorSpaceModel:
-    def __init__(self, data_path, cache_dir):
+class BertFaissVectorSpaceModel:
+    def __init__(self, data_path, cache_dir, model_name='all-MiniLM-L6-v2'):
         self.data_path = data_path
         self.cache_dir = cache_dir
-        self.vectorizer = TfidfVectorizer(stop_words='english', max_df=0.9)
         self.df = pd.read_csv(data_path)
-        self.tfidf_matrix = None
-        self.doc_hashes = {}
+        self.index = None
         self.indexed_df = pd.DataFrame()
+        self.doc_hashes = {}
+        self.model = SentenceTransformer(model_name)
         os.makedirs(cache_dir, exist_ok=True)
-        print("88888")
         self._load_cache()
 
     def _text_hash(self, url, full_text):
@@ -27,11 +23,8 @@ class VectorSpaceModel:
         return hashlib.md5(key.encode('utf-8')).hexdigest()
 
     def _load_cache(self):
-        if os.path.exists(f"{self.cache_dir}/vectorizer.pkl"):
-            with open(f"{self.cache_dir}/vectorizer.pkl", "rb") as f:
-                self.vectorizer = pickle.load(f)
-        if os.path.exists(f"{self.cache_dir}/tfidf_matrix.npz"):
-            self.tfidf_matrix = np.load(f"{self.cache_dir}/tfidf_matrix.npz", allow_pickle=True)['arr_0'].item()
+        if os.path.exists(f"{self.cache_dir}/faiss_index.bin"):
+            self.index = faiss.read_index(f"{self.cache_dir}/faiss_index.bin")
         if os.path.exists(f"{self.cache_dir}/indexed_df.csv"):
             self.indexed_df = pd.read_csv(f"{self.cache_dir}/indexed_df.csv")
         if os.path.exists(f"{self.cache_dir}/doc_hashes.pkl"):
@@ -39,10 +32,8 @@ class VectorSpaceModel:
                 self.doc_hashes = pickle.load(f)
 
     def _save_cache(self):
-        with open(f"{self.cache_dir}/vectorizer.pkl", "wb") as f:
-            pickle.dump(self.vectorizer, f)
-        if isinstance(self.tfidf_matrix, np.ndarray):
-            np.savez_compressed(f"{self.cache_dir}/tfidf_matrix.npz", arr_0=self.tfidf_matrix)
+        if self.index is not None:
+            faiss.write_index(self.index, f"{self.cache_dir}/faiss_index.bin")
         self.indexed_df.to_csv(f"{self.cache_dir}/indexed_df.csv", index=False)
         with open(f"{self.cache_dir}/doc_hashes.pkl", "wb") as f:
             pickle.dump(self.doc_hashes, f)
@@ -52,6 +43,7 @@ class VectorSpaceModel:
         new_rows = []
         new_texts = []
         hashes = {}
+
         for _, row in self.df.iterrows():
             url = row['url']
             full_text = row['full_text']
@@ -60,10 +52,14 @@ class VectorSpaceModel:
                 new_rows.append(row)
                 new_texts.append(full_text)
                 hashes[url] = doc_hash
+
         if new_texts:
             print(f"Indexing {len(new_texts)} new or updated documents...")
-            updated_matrix = self.vectorizer.fit_transform(new_texts)
-            self.tfidf_matrix = updated_matrix
+            embeddings = self.model.encode(new_texts, show_progress_bar=True, convert_to_numpy=True)
+
+            self.index = faiss.IndexFlatL2(embeddings.shape[1])
+            self.index.add(embeddings)
+
             self.indexed_df = pd.DataFrame(new_rows)
             self.doc_hashes.update(hashes)
             self._save_cache()
@@ -71,19 +67,20 @@ class VectorSpaceModel:
             print("No new or updated documents to index.")
 
     def search(self, query, top_k=10):
-        if self.tfidf_matrix is None or self.indexed_df.empty:
-            print("TF-IDF matrix not initialized. Run preprocess_and_vectorize() first.")
+        if self.index is None or self.indexed_df.empty:
+            print("FAISS index not initialized. Run preprocess_and_vectorize() first.")
             return pd.DataFrame(), []
-        query_vec = self.vectorizer.transform([query])
-        cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
-        top_indices = cosine_similarities.argsort()[-top_k:][::-1]
-        return self.indexed_df.iloc[top_indices]['url']
 
-# if __name__ == "__main__":
-#     model = VectorSpaceModel("../combined_data.csv")
-#     model.preprocess_and_vectorize()
-#     query = input("Enter your search query: ")
-#     results, scores = model.search(query)
-#     print("\nTop Results:\n")
-#     for i, (index, row) in enumerate(results.iterrows()):
-#         print(f"{i+1}- {row['url']}")
+        query_embedding = self.model.encode([query], convert_to_numpy=True)
+        distances, indices = self.index.search(query_embedding, top_k)
+        results = self.indexed_df.iloc[indices[0]]
+        return results[['url']], distances[0]
+
+if __name__ == "__main__":
+    model = BertFaissVectorSpaceModel("../combined_data.csv", cache_dir="./cache")
+    model.preprocess_and_vectorize()
+    query = input("Enter your search query: ")
+    results, scores = model.search(query)
+    print("\nTop Results:\n")
+    for i, (url, score) in enumerate(zip(results['url'], scores)):
+        print(f"{i+1}. {url} (distance: {score:.4f})")
