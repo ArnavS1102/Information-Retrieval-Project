@@ -77,14 +77,18 @@ class BertKNNVectorModel:
         distances, indices = self.knn_index.kneighbors(query_embedding)
 
         results = self.indexed_df.iloc[indices[0]]
-        return results[['url']], distances[0]
+        
+        # Return url, title, and meta_description
+        return results[['url', 'title', 'meta_description']], distances[0]
+
 
 if __name__ == "__main__":
     model = BertKNNVectorModel("combined_data.csv", cache_dir="cache")
-    model.preprocess_and_index()
+    # model.preprocess_and_index()
     query = input("Enter your search query: ")
     results, scores = model.search(query)
+    print(results)
 
-    print("\nTop Results:\n")
-    for i, (url, score) in enumerate(zip(results['url'], scores)):
-        print(f"{i+1}. {url} (distance: {score:.4f})")
+    # print("\nTop Results:\n")
+    # for i, (url, score) in enumerate(zip(results['url'], scores)):
+    #     print(f"{i+1}. {url} (distance: {score:.4f})")
