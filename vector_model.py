@@ -69,24 +69,36 @@ class BertKNNVectorModel:
     def search(self, query, top_k=5):
         if self.embeddings is None or self.indexed_df.empty:
             print("No index available. Run preprocess_and_index() first.")
-            return pd.DataFrame(), []
+            return []
 
         query_embedding = self.model.encode([query], convert_to_numpy=True)
         self.knn_index = NearestNeighbors(n_neighbors=top_k, metric='cosine')
         self.knn_index.fit(self.embeddings)
         distances, indices = self.knn_index.kneighbors(query_embedding)
 
-        results = self.indexed_df.iloc[indices[0]]
-        
-        # Return url, title, and meta_description
-        return results[['url', 'title', 'meta_description']], distances[0]
+        results = self.indexed_df.iloc[indices[0]].copy()
+        results['score'] = 1 - distances[0]  # Cosine similarity
+
+        def resolve_description(row):
+            if pd.isna(row['meta_description']) or not row['meta_description'] or row['meta_description']=='No Description':
+                tokens = row['body_text'].split()
+                return ' '.join(tokens[:30])
+            return row['meta_description']
+
+        results['meta_description'] = results.apply(resolve_description, axis=1)
+
+        # Convert to JSON-serializable output
+        json_results = results[['url', 'title', 'meta_description', 'score']].to_dict(orient='records')
+        return json_results
+
+
 
 
 if __name__ == "__main__":
     model = BertKNNVectorModel("combined_data.csv", cache_dir="cache")
     # model.preprocess_and_index()
     query = input("Enter your search query: ")
-    results, scores = model.search(query)
+    results = model.search(query)
     print(results)
 
     # print("\nTop Results:\n")
