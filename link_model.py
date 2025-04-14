@@ -61,14 +61,21 @@ class LinkAnalysisModel:
                 break
         return results
 
-    def get_top_by_pagerank(self, top_k=10):
-        return self._get_top_documents(self.pagerank_scores, top_k, score_label='pagerank')
+    def query_aware_pagerank(self, query, vector_model, top_k=10):
+        vector_results = vector_model.search(query, top_k=top_k * 3)
+        relevant_urls = set(res['url'] for res in vector_results)
+        subgraph = self.graph.subgraph(relevant_urls).copy()
+        pagerank_scores = nx.pagerank(subgraph, alpha=0.85)
+        docs = self._get_top_documents(pagerank_scores, top_k=top_k, score_label='pagerank')
+        return pd.DataFrame(docs)[['url', 'title', 'meta_description']].to_dict(orient='records')
 
-    def get_top_by_hits_authority(self, top_k=10):
-        return self._get_top_documents(self.authority_scores, top_k, score_label='authority')
-
-    def get_top_by_hits_hub(self, top_k=10):
-        return self._get_top_documents(self.hub_scores, top_k, score_label='hub')
+    def query_aware_hits(self, query, vector_model, top_k=10):
+        vector_results = vector_model.search(query, top_k=top_k * 3)
+        relevant_urls = set(res['url'] for res in vector_results)
+        subgraph = self.graph.subgraph(relevant_urls).copy()
+        _, authorities = nx.hits(subgraph, max_iter=500, normalized=True)
+        docs = self._get_top_documents(authorities, top_k=top_k, score_label='authority')
+        return pd.DataFrame(docs)[['url', 'title', 'meta_description']].to_dict(orient='records')
 
 
 class SearchEngine:
@@ -76,8 +83,44 @@ class SearchEngine:
         self.vector_model = BertKNNVectorModel(data_path, cache_dir)
         self.link_model = LinkAnalysisModel(data_path)
 
-        self.norm_pagerank = self._normalize(self.link_model.pagerank_scores)
-        self.norm_authority = self._normalize(self.link_model.authority_scores)
+    def pagerank_model(self, query, top_k=10):
+        return self.link_model.query_aware_pagerank(query, self.vector_model, top_k)
+
+    def hits_model(self, query, top_k=10):
+        return self.link_model.query_aware_hits(query, self.vector_model, top_k)
+
+    def hybrid_model(self, query, top_k=10, alpha=0.6, beta=0.2, gamma=0.2):
+        vector_results = self.vector_model.search(query, top_k=top_k)
+        hybrid_results = []
+
+        norm_pagerank = self._normalize(self.link_model.pagerank_scores)
+        norm_authority = self._normalize(self.link_model.authority_scores)
+
+        for res in vector_results:
+            url = res['url']
+            vec_score = res['score']
+            pr_score = norm_pagerank.get(url, 0.0)
+            auth_score = norm_authority.get(url, 0.0)
+
+            combined_score = (
+                alpha * vec_score +
+                beta * auth_score +
+                gamma * pr_score
+            )
+
+            meta_desc = res.get('meta_description')
+            if not meta_desc or pd.isna(meta_desc) or meta_desc == "No Description":
+                meta_desc = ' '.join(str(res.get('body_text', '')).split()[:30])
+
+            hybrid_results.append({
+                'url': url,
+                'title': res['title'],
+                'meta_description': meta_desc,
+                'combined_score': round(combined_score, 4)
+            })
+
+        hybrid_results.sort(key=lambda x: x['combined_score'], reverse=True)
+        return pd.DataFrame(hybrid_results)[['url', 'title', 'meta_description']].to_dict(orient='records')
 
     def _normalize(self, score_dict):
         values = list(score_dict.values())
@@ -87,60 +130,20 @@ class SearchEngine:
             for k, v in score_dict.items()
         }
 
-    def pagerank_model(self, top_k=10):
-        return self.link_model.get_top_by_pagerank(top_k)
-
-    def hits_model(self, top_k=10):
-        return self.link_model.get_top_by_hits_authority(top_k)
-
-    def hybrid_model(self, query, top_k=10, alpha=0.6, beta=0.2, gamma=0.2):
-        vector_results = self.vector_model.search(query, top_k=top_k)
-        hybrid_results = []
-
-        for res in vector_results:
-            url = res['url']
-            vec_score = res['score']
-            pr_score = self.norm_pagerank.get(url, 0.0)
-            auth_score = self.norm_authority.get(url, 0.0)
-
-            combined_score = (
-                alpha * vec_score +
-                beta * auth_score +
-                gamma * pr_score
-            )
-
-            res.update({
-                'pagerank': round(pr_score, 4),
-                'authority': round(auth_score, 4),
-                'combined_score': round(combined_score, 4)
-            })
-            hybrid_results.append(res)
-
-        hybrid_results.sort(key=lambda x: x['combined_score'], reverse=True)
-        return hybrid_results
-
 
 if __name__ == "__main__":
     engine = SearchEngine(data_path="combined_data.csv")
 
     query = input("Enter your search query: ")
-    print("\n--- Hybrid Ranked Results (Vector + PageRank + Authority) ---\n")
-    hybrid = engine.hybrid_model(query)
-    for i, doc in enumerate(hybrid, 1):
-        print(f"{i}. {doc['title']} (Score: {doc['combined_score']:.4f})")
-        print(f"   URL: {doc['url']}")
-        print(f"   Description: {doc['meta_description']}\n")
 
-    print("\n--- Top 10 Pages by PageRank ---\n")
-    pagerank = engine.pagerank_model()
-    for i, doc in enumerate(pagerank, 1):
-        print(f"{i}. {doc['title']} (PageRank: {doc['pagerank']:.4f})")
-        print(f"   URL: {doc['url']}")
-        print(f"   Description: {doc['meta_description']}\n")
+    print("\n--- Hybrid Ranked Results ---")
+    for i, doc in enumerate(engine.hybrid_model(query), 1):
+        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
 
-    print("\n--- Top 10 Pages by HITS Authority ---\n")
-    hits = engine.hits_model()
-    for i, doc in enumerate(hits, 1):
-        print(f"{i}. {doc['title']} (Authority: {doc['authority']:.4f})")
-        print(f"   URL: {doc['url']}")
-        print(f"   Description: {doc['meta_description']}\n")
+    print("\n--- PageRank Results ---")
+    for i, doc in enumerate(engine.pagerank_model(query), 1):
+        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
+
+    print("\n--- HITS Authority Results ---")
+    for i, doc in enumerate(engine.hits_model(query), 1):
+        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
