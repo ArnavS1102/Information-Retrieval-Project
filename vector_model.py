@@ -66,7 +66,7 @@ class BertKNNVectorModel:
         else:
             print("No new documents to index.")
 
-    def search(self, query, top_k=5):
+    def search(self, query, top_k=10):
         if self.embeddings is None or self.indexed_df.empty:
             print("No index available. Run preprocess_and_index() first.")
             return []
