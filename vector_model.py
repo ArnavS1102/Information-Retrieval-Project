@@ -77,7 +77,7 @@ class BertKNNVectorModel:
         distances, indices = self.knn_index.kneighbors(query_embedding)
 
         results = self.indexed_df.iloc[indices[0]].copy()
-        results['score'] = 1 - distances[0]  # Cosine similarity
+        # results['score'] = 1 - distances[0]  # Cosine similarity
 
         def resolve_description(row):
             if pd.isna(row['meta_description']) or not row['meta_description'] or row['meta_description']=='No Description':
@@ -88,10 +88,9 @@ class BertKNNVectorModel:
         results['meta_description'] = results.apply(resolve_description, axis=1)
 
         # Convert to JSON-serializable output
-        json_results = results[['url', 'title', 'meta_description', 'score']].to_dict(orient='records')
+        # json_results = results[['url', 'title', 'meta_description', 'score']].to_dict(orient='records')
+        json_results = results[['url', 'title', 'meta_description']].to_dict(orient='records')
         return json_results
-
-
 
 
 if __name__ == "__main__":
