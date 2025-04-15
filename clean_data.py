@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from vector_model import BertKNNVectorModel
 
+from link_model import SearchEngine
+
 load_dotenv()
 
 def get_directory_and_slug(url):
@@ -46,5 +48,27 @@ if __name__ == "__main__":
 
     df.to_csv(combined_data_path, index=False, escapechar='\\')
 
-    model = BertKNNVectorModel(combined_data_path, cache_path)
-    model.preprocess_and_index()
+    vector_model = BertKNNVectorModel(combined_data_path, cache_path)
+    vector_model.preprocess_and_index()
+
+    query = 'Africa Politics'
+
+    #For asking a Question:
+    # results = vector_model.search(query)
+
+    link_engine = SearchEngine(combined_data_path)
+    #For PageRank
+    # results = link_engine.pagerank_model(query)
+
+    #For HITS
+    # results = link_engine.hits_model(query)
+
+    #For Hybrid
+    # results = link_engine.hybrid_model(query)
+
+
+
+
+
+
+
