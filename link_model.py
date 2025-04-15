@@ -130,20 +130,19 @@ class SearchEngine:
             for k, v in score_dict.items()
         }
 
+# if __name__ == "__main__":
+#     engine = SearchEngine(data_path="combined_data.csv")
 
-if __name__ == "__main__":
-    engine = SearchEngine(data_path="combined_data.csv")
+#     query = input("Enter your search query: ")
 
-    query = input("Enter your search query: ")
+#     print("\n--- Hybrid Ranked Results ---")
+#     for i, doc in enumerate(engine.hybrid_model(query), 1):
+#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
 
-    print("\n--- Hybrid Ranked Results ---")
-    for i, doc in enumerate(engine.hybrid_model(query), 1):
-        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
+#     print("\n--- PageRank Results ---")
+#     for i, doc in enumerate(engine.pagerank_model(query), 1):
+#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
 
-    print("\n--- PageRank Results ---")
-    for i, doc in enumerate(engine.pagerank_model(query), 1):
-        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
-
-    print("\n--- HITS Authority Results ---")
-    for i, doc in enumerate(engine.hits_model(query), 1):
-        print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
+#     print("\n--- HITS Authority Results ---")
+#     for i, doc in enumerate(engine.hits_model(query), 1):
+#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
