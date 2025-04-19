@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from vector_model import BertKNNVectorModel
 from link_model import SearchEngine
+from tf_idf import TfidfSearchEngine
 
 import nltk
 import re
@@ -73,15 +74,19 @@ if __name__ == "__main__":
 
     df.to_csv(combined_data_path, index=False, escapechar='\\')
 
-    vector_model = BertKNNVectorModel(combined_data_path, cache_path)
-    vector_model.preprocess_and_index()
-
+    # vector_model = BertKNNVectorModel(combined_data_path, cache_path)
+    # vector_model.preprocess_and_index()
     query = 'Africa Politics'
+
+    engine = TfidfSearchEngine("combined_data.csv")
+    engine.preprocess_and_index()
+    print(engine.search("privacy preserving image recognition"))
+
 
     #For asking a Question:
     # results = vector_model.search(query)
 
-    link_engine = SearchEngine(combined_data_path)
+    # link_engine = SearchEngine(combined_data_path)
     #For PageRank
     # results = link_engine.pagerank_model(query)
 
