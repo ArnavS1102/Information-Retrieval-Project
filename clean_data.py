@@ -10,6 +10,8 @@ import nltk
 import re
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
+from datetime import datetime, timedelta
+
 
 # Download NLTK resources
 nltk.download('stopwords')
@@ -44,12 +46,18 @@ def get_url_key(url):
     return (parsed.netloc.lower(), directory, slug)
 
 if __name__ == "__main__":
+
     combined_data_path = os.getenv("COMBINED_DATA_PATH")
     cache_path = os.getenv("CACHE_PATH")
 
-    df = pd.read_csv(combined_data_path, escapechar='\\')
+    csv_files = [
+    "datasets/data1.csv",
+    "datasets/data2.csv",
+    "datasets/data3.csv",
+    "datasets/data4.csv"
+    ]
 
-    df.columns = [
+    required_cols = [
         'url', 
         'title', 
         'meta_description', 
@@ -59,6 +67,35 @@ if __name__ == "__main__":
         'out_links', 
         'anchor_texts'
     ]
+
+    # dfs = []
+    # for file in csv_files:
+    #     temp_df = pd.read_csv(file)
+    #     print(temp_df.columns)
+    #     temp_df.columns = required_cols
+    
+    #     dfs.append(temp_df)
+
+
+    dfs = []
+    for file in csv_files:
+        temp_df = pd.read_csv(file, escapechar='\\', low_memory=False)
+
+        if len(temp_df.columns) == 6:
+            temp_df['depth'] = 1
+            start_time = datetime.now()
+            temp_df['last_crawled'] = [start_time + timedelta(seconds=i) for i in range(len(temp_df))]
+            temp_df['last_crawled'] = temp_df['last_crawled'].astype(str)
+
+        else:
+            temp_df.columns = required_cols
+
+        dfs.append(temp_df)
+
+    df = pd.concat(dfs, ignore_index=True)
+    # df = pd.read_csv(combined_data_path, escapechar='\\')
+
+    df.columns = required_cols
 
     df = df.sort_values("last_crawled").drop_duplicates(subset="url", keep="first")
     df.dropna(subset=['url', 'body_text'], inplace=True)
@@ -76,11 +113,14 @@ if __name__ == "__main__":
 
     # vector_model = BertKNNVectorModel(combined_data_path, cache_path)
     # vector_model.preprocess_and_index()
-    query = 'Africa Politics'
 
-    engine = TfidfSearchEngine("combined_data.csv")
-    engine.preprocess_and_index()
-    print(engine.search("privacy preserving image recognition"))
+
+
+    # query = 'Africa Politics'
+
+    # engine = TfidfSearchEngine("combined_data.csv")
+    # engine.preprocess_and_index()
+    # print(engine.search("privacy preserving image recognition"))
 
 
     #For asking a Question:
