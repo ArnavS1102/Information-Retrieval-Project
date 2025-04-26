@@ -79,8 +79,9 @@ class LinkAnalysisModel:
 
 
 class SearchEngine:
-    def __init__(self, data_path, cache_dir="cache"):
-        self.vector_model = BertKNNVectorModel(data_path, cache_dir)
+    def __init__(self, data_path, vector_model, cache_dir="cache"):
+        # self.vector_model = BertKNNVectorModel(data_path, cache_dir)
+        self.vector_model = vector_model
         self.link_model = LinkAnalysisModel(data_path)
 
     def pagerank_model(self, query, top_k=10):
