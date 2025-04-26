@@ -52,7 +52,7 @@ class BertKNNVectorModel:
                 hashes[url] = doc_hash
 
         if new_texts:
-            print(f"Indexing {len(new_texts)} new or updated documents...")
+            # print(f"Indexing {len(new_texts)} new or updated documents...")
             new_embeddings = self.model.encode(new_texts, show_progress_bar=True, convert_to_numpy=True)
 
             self.embeddings = new_embeddings
@@ -63,12 +63,12 @@ class BertKNNVectorModel:
             self.knn_index.fit(self.embeddings)
 
             self._save_cache()
-        else:
-            print("No new documents to index.")
+        # else:
+            # print("No new documents to index.")
 
     def search(self, query, top_k=10):
         if self.embeddings is None or self.indexed_df.empty:
-            print("No index available. Run preprocess_and_index() first.")
+            # print("No index available. Run preprocess_and_index() first.")
             return []
 
         query_embedding = self.model.encode([query], convert_to_numpy=True)
@@ -91,15 +91,3 @@ class BertKNNVectorModel:
         json_results = results[['url', 'title', 'meta_description', 'score']].to_dict(orient='records')
         # json_results = results[['url', 'title', 'meta_description']].to_dict(orient='records')
         return json_results
-
-
-# if __name__ == "__main__":
-#     model = BertKNNVectorModel("combined_data.csv", cache_dir="cache")
-#     # model.preprocess_and_index()
-#     query = input("Enter your search query: ")
-#     results = model.search(query)
-#     print(results)
-
-    # print("\nTop Results:\n")
-    # for i, (url, score) in enumerate(zip(results['url'], scores)):
-    #     print(f"{i+1}. {url} (distance: {score:.4f})")
