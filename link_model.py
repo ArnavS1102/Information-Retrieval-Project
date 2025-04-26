@@ -1,12 +1,15 @@
 import pandas as pd
 import networkx as nx
 import re
+import ast
+import os
 
 from vector_model import BertKNNVectorModel
 
 class LinkAnalysisModel:
     def __init__(self, data_path):
         self.df = pd.read_csv(data_path)
+        count_ones = self.df["out_links"].apply(lambda x: x == 1 or x == '1').sum()
         self.graph = nx.DiGraph()
         self.pagerank_scores = {}
         self.hub_scores = {}
@@ -15,21 +18,28 @@ class LinkAnalysisModel:
         self._compute_scores()
 
     def _build_graph(self):
-        def extract_links(text):
-            if not isinstance(text, str):
-                return []
-            return re.findall(r'https?://[^\s\'",\[\]()]+', text)
-
-        self.df['out_links'] = self.df['out_links'].apply(extract_links)
+        def safe_parse_links(x):
+            if isinstance(x, str):
+                try:
+                    return ast.literal_eval(x)
+                except (ValueError, SyntaxError):
+                    return []
+            return []
+        
+        self.df['out_links'] = self.df['out_links'].apply(safe_parse_links)
+        # self.df['out_links'] = self.df['out_links'].apply(extract_links)
 
         for _, row in self.df.iterrows():
             src = row['url']
-            for dst in row['out_links']:
-                if isinstance(dst, str) and dst.strip():
-                    self.graph.add_edge(src, dst)
+            out_links = row['out_links']
+            if isinstance(out_links, list):
+                for dst in out_links:
+                    if isinstance(dst, str) and dst.strip():
+                        self.graph.add_edge(src, dst)
+
+
 
     def _compute_scores(self):
-        print("Computing PageRank and HITS...")
         self.pagerank_scores = nx.pagerank(self.graph, alpha=0.85)
         hubs, authorities = nx.hits(self.graph, max_iter=500, normalized=True)
         self.hub_scores = hubs
@@ -78,10 +88,16 @@ class LinkAnalysisModel:
         return pd.DataFrame(docs)[['url', 'title', 'meta_description']].to_dict(orient='records')
 
 
+
 class SearchEngine:
-    def __init__(self, data_path, cache_dir="cache"):
-        self.vector_model = BertKNNVectorModel(data_path, cache_dir)
-        self.link_model = LinkAnalysisModel(data_path)
+    
+    def __init__(self, vector_model, cache_dir="cache"):
+        combined_data_path = os.getenv("COMBINED_DATA_PATH")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        combined_data_path = os.path.join(current_dir, combined_data_path)
+        # self.vector_model = BertKNNVectorModel(data_path, cache_dir)
+        self.vector_model = vector_model
+        self.link_model = LinkAnalysisModel(combined_data_path)
 
     def pagerank_model(self, query, top_k=10):
         return self.link_model.query_aware_pagerank(query, self.vector_model, top_k)
@@ -120,6 +136,7 @@ class SearchEngine:
             })
 
         hybrid_results.sort(key=lambda x: x['combined_score'], reverse=True)
+        
         return pd.DataFrame(hybrid_results)[['url', 'title', 'meta_description']].to_dict(orient='records')
 
     def _normalize(self, score_dict):
@@ -130,19 +147,3 @@ class SearchEngine:
             for k, v in score_dict.items()
         }
 
-# if __name__ == "__main__":
-#     engine = SearchEngine(data_path="combined_data.csv")
-
-#     query = input("Enter your search query: ")
-
-#     print("\n--- Hybrid Ranked Results ---")
-#     for i, doc in enumerate(engine.hybrid_model(query), 1):
-#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
-
-#     print("\n--- PageRank Results ---")
-#     for i, doc in enumerate(engine.pagerank_model(query), 1):
-#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
-
-#     print("\n--- HITS Authority Results ---")
-#     for i, doc in enumerate(engine.hits_model(query), 1):
-#         print(f"{i}. {doc['title']}\n   URL: {doc['url']}\n   Description: {doc['meta_description']}\n")
