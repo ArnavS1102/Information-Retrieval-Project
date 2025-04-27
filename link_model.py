@@ -20,14 +20,15 @@ class LinkAnalysisModel:
     def _build_graph(self):
         def safe_parse_links(x):
             if isinstance(x, str):
+                if x.strip() == '1':  # <-- Skip parsing if the original is '1'
+                    return None  # Mark it as None
                 try:
                     return ast.literal_eval(x)
                 except (ValueError, SyntaxError):
                     return []
             return []
-        
+
         self.df['out_links'] = self.df['out_links'].apply(safe_parse_links)
-        # self.df['out_links'] = self.df['out_links'].apply(extract_links)
 
         for _, row in self.df.iterrows():
             src = row['url']
@@ -36,8 +37,6 @@ class LinkAnalysisModel:
                 for dst in out_links:
                     if isinstance(dst, str) and dst.strip():
                         self.graph.add_edge(src, dst)
-
-
 
     def _compute_scores(self):
         self.pagerank_scores = nx.pagerank(self.graph, alpha=0.85)
