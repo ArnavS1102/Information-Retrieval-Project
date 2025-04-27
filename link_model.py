@@ -4,7 +4,7 @@ import re
 import ast
 import os
 
-from vector_model import BertKNNVectorModel
+# from vector_model import BertKNNVectorModel
 
 class LinkAnalysisModel:
     def __init__(self, data_path):
