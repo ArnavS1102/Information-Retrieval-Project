@@ -1,39 +1,47 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
-import faiss
-import pickle
-import numpy as np
+from vector_model import BertFaissVectorModel
+from link_model import SearchEngine
+import os
 
+# --- Setup FastAPI ---
 app = FastAPI()
 
-model = SentenceTransformer('all-MiniLM-L6-v2')  
-index = faiss.read_index("faiss/faiss.index")    
-with open("faiss/metadata.pkl", "rb") as f:
-    id_to_metadata = pickle.load(f)              
+# --- Load Everything Once ---
 
-# Request format
+# Set paths
+combined_data_path = "combined_data.csv"  # ⚡ Update this path
+cache_dir = "faiss"  # Folder where faiss.index and metadata.pkl are saved
+
+# Initialize vector model
+vector_model = BertFaissVectorModel(data_path=combined_data_path, cache_dir=cache_dir)
+
+# Initialize search engine (loads LinkAnalysisModel inside)
+search_engine = SearchEngine(vector_model)
+
+# --- Request format ---
 class QueryRequest(BaseModel):
     query: str
-    top_k: int = 5
+    top_k: int = 10
 
-@app.post("/search")
-def search_query(req: QueryRequest):
-    query_embedding = model.encode([req.query], convert_to_numpy=True)
-    faiss.normalize_L2(query_embedding)
+# --- API Endpoints ---
 
-    distances, indices = index.search(query_embedding, req.top_k)
+@app.post("/search/vector")
+def search_vector(req: QueryRequest):
+    results = vector_model.search(req.query, top_k=req.top_k)
+    return {"results": results}
 
-    results = []
-    for dist, idx in zip(distances[0], indices[0]):
-        if idx == -1:
-            continue
-        meta = id_to_metadata.get(idx, {})
-        results.append({
-            "url": meta.get("url", ""),
-            "title": meta.get("title", ""),
-            "meta_description": meta.get("meta_description", ""),
-            "score": float(dist)
-        })
+@app.post("/search/pagerank")
+def search_pagerank(req: QueryRequest):
+    results = search_engine.pagerank_model(req.query, top_k=req.top_k)
+    return {"results": results}
 
+@app.post("/search/hits")
+def search_hits(req: QueryRequest):
+    results = search_engine.hits_model(req.query, top_k=req.top_k)
+    return {"results": results}
+
+@app.post("/search/hybrid")
+def search_hybrid(req: QueryRequest):
+    results = search_engine.hybrid_model(req.query, top_k=req.top_k)
     return {"results": results}
