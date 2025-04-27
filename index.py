@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from vector_model import BertKNNVectorModel
 from link_model import SearchEngine
-from tf_idf import TfidfSearchEngine
+# from tf_idf import TfidfSearchEngine
 
 import nltk
 import re
